@@ -1,0 +1,271 @@
+Berikut adalah kode lengkap untuk efek **Tremolo** menggunakan framework **JUCE**. Kode ini mencakup implementasi dari **PluginProcessor.h**, **PluginProcessor.cpp**, **PluginEditor.h**, dan **PluginEditor.cpp**, dengan tambahan kontrol untuk **depth** dan **rate** (pengaturan tremolo).
+
+### 1. **PluginProcessor.h**:
+
+```cpp
+#pragma once
+
+#include <JuceHeader.h>
+
+class TremoloAudioProcessor  : public juce::AudioProcessor
+{
+public:
+    TremoloAudioProcessor();
+    ~TremoloAudioProcessor() override;
+
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+
+#ifndef JucePlugin_PreferredChannelConfigurations
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+#endif
+
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override;
+
+    const juce::String getName() const override;
+    bool acceptsMidi() const override;
+    bool producesMidi() const override;
+    bool isMidiEffect() const override;
+    double getTailLengthSeconds() const override;
+
+    int getNumPrograms() override;
+    int getCurrentProgram() override;
+    void setCurrentProgram (int index) override;
+    const juce::String getProgramName (int index) override;
+    void changeProgramName (int index, const juce::String& newName) override;
+
+    void getStateInformation (juce::MemoryBlock& destData) override;
+    void setStateInformation (const void* data, int sizeInBytes) override;
+
+    float tremoloDepth = 0.5f;   // Depth of the tremolo (0 to 1)
+    float tremoloRate = 5.0f;    // Rate of the tremolo in Hz
+
+private:
+    float phase = 0.0f;          // Phase for the LFO
+    double sampleRate = 44100.0; // Sample rate
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TremoloAudioProcessor)
+};
+```
+
+### 2. **PluginProcessor.cpp**:
+
+```cpp
+#include "PluginProcessor.h"
+#include "PluginEditor.h"
+
+TremoloAudioProcessor::TremoloAudioProcessor()
+#ifndef JucePlugin_PreferredChannelConfigurations
+     : AudioProcessor (BusesProperties()
+                       .withInput ("Input", juce::AudioChannelSet::stereo(), true)
+                       .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+#endif
+{
+}
+
+TremoloAudioProcessor::~TremoloAudioProcessor()
+{
+}
+
+void TremoloAudioProcessor::prepareToPlay (double newSampleRate, int samplesPerBlock)
+{
+    sampleRate = newSampleRate;
+}
+
+void TremoloAudioProcessor::releaseResources()
+{
+}
+
+bool TremoloAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+{
+    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
+        && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+        return false;
+
+    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
+        return false;
+
+    return true;
+}
+
+void TremoloAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+{
+    juce::ScopedNoDenormals noDenormals;
+    auto totalNumInputChannels = getTotalNumInputChannels();
+    auto totalNumOutputChannels = getTotalNumOutputChannels();
+
+    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
+        buffer.clear (i, 0, buffer.getNumSamples());
+
+    auto numSamples = buffer.getNumSamples();
+    auto phaseIncrement = (2.0 * juce::MathConstants<double>::pi * tremoloRate) / sampleRate;
+
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
+        auto* channelData = buffer.getWritePointer (channel);
+
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            float lfo = (1.0f - tremoloDepth) + tremoloDepth * std::sin(phase);
+            channelData[sample] *= lfo;
+
+            phase += phaseIncrement;
+            if (phase > juce::MathConstants<double>::twoPi)
+                phase -= juce::MathConstants<double>::twoPi;
+        }
+    }
+}
+
+juce::AudioProcessorEditor* TremoloAudioProcessor::createEditor()
+{
+    return new TremoloAudioProcessorEditor (*this);
+}
+
+bool TremoloAudioProcessor::hasEditor() const
+{
+    return true;
+}
+
+const juce::String TremoloAudioProcessor::getName() const
+{
+    return JucePlugin_Name;
+}
+
+bool TremoloAudioProcessor::acceptsMidi() const
+{
+    return false;
+}
+
+bool TremoloAudioProcessor::producesMidi() const
+{
+    return false;
+}
+
+bool TremoloAudioProcessor::isMidiEffect() const
+{
+    return false;
+}
+
+double TremoloAudioProcessor::getTailLengthSeconds() const
+{
+    return 0.0;
+}
+
+int TremoloAudioProcessor::getNumPrograms()
+{
+    return 1;
+}
+
+int TremoloAudioProcessor::getCurrentProgram()
+{
+    return 0;
+}
+
+void TremoloAudioProcessor::setCurrentProgram (int index)
+{
+}
+
+const juce::String TremoloAudioProcessor::getProgramName (int index)
+{
+    return {};
+}
+
+void TremoloAudioProcessor::changeProgramName (int index, const juce::String& newName)
+{
+}
+
+void TremoloAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+}
+
+void TremoloAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+{
+}
+```
+
+### 3. **PluginEditor.h**:
+
+```cpp
+#pragma once
+
+#include <JuceHeader.h>
+#include "PluginProcessor.h"
+
+class TremoloAudioProcessorEditor  : public juce::AudioProcessorEditor
+{
+public:
+    TremoloAudioProcessorEditor (TremoloAudioProcessor&);
+    ~TremoloAudioProcessorEditor() override;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+private:
+    TremoloAudioProcessor& audioProcessor;
+
+    juce::Slider depthSlider;
+    juce::Slider rateSlider;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TremoloAudioProcessorEditor)
+};
+```
+
+### 4. **PluginEditor.cpp**:
+
+```cpp
+#include "PluginProcessor.h"
+#include "PluginEditor.h"
+
+TremoloAudioProcessorEditor::TremoloAudioProcessorEditor (TremoloAudioProcessor& p)
+    : AudioProcessorEditor (&p), audioProcessor (p)
+{
+    depthSlider.setRange(0.0, 1.0);
+    depthSlider.setValue(audioProcessor.tremoloDepth);
+    depthSlider.onValueChange = [&]() { audioProcessor.tremoloDepth = depthSlider.getValue(); };
+    addAndMakeVisible(depthSlider);
+
+    rateSlider.setRange(0.1, 20.0);
+    rateSlider.setValue(audioProcessor.tremoloRate);
+    rateSlider.onValueChange = [&]() { audioProcessor.tremoloRate = rateSlider.getValue(); };
+    addAndMakeVisible(rateSlider);
+
+    setSize (400, 300);
+}
+
+TremoloAudioProcessorEditor::~TremoloAudioProcessorEditor()
+{
+}
+
+void TremoloAudioProcessorEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black);
+    g.setColour (juce::Colours::white);
+    g.setFont (15.0f);
+    g.drawFittedText ("Tremolo Effect", getLocalBounds(), juce::Justification::centred, 1);
+}
+
+void TremoloAudioProcessorEditor::resized()
+{
+    depthSlider.setBounds (10, 40, getWidth() - 20, 20);
+    rateSlider.setBounds (10, 70, getWidth() - 20, 20);
+}
+```
+
+### Penjelasan:
+
+1. **TremoloAudioProcessor**:
+    - Berisi pengaturan dasar untuk tremolo seperti **depth** (kedalaman tremolo) dan **rate** (kecepatan osilasi LFO).
+    - Fungsi `processBlock` mengaplikasikan tremolo dengan mengalikan sinyal audio dengan sinyal LFO (Low-Frequency Oscillator).
+
+2. **TremoloAudioProcessorEditor**:
+    - Menyediakan antarmuka pengguna dengan slider untuk mengontrol **depth** dan **rate** tremolo.
+    - **depthSlider** mengatur intensitas tremolo, sedangkan **rateSlider** mengatur frekuensi tremolo.
+
+3. **LFO Calculation**:
+    - Sinyal LFO dihasilkan oleh fungsi sinus untuk memodulasi amplitudo sinyal audio.
+    - Amplitudo sinyal dikontrol oleh parameter **depth**.
+
+Dengan kode ini, plugin audio tremolo Anda sudah dapat bekerja dengan dua slider yang mengontrol kedalaman dan kecepatan tremolo.
